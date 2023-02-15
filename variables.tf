@@ -2,6 +2,10 @@ variable "region" {
   type = string
 }
 
+variable "aws_profile"{
+    type = string
+}
+
 variable "cidr_block" {
   type = string
 }
