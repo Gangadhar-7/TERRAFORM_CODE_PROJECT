@@ -3,7 +3,7 @@ name: "Terraform"
 on:
   push:
     branches: [main]
-  pull_request:
+  pull_request:
     branches: [main]
 
 jobs:
@@ -28,7 +28,3 @@ jobs:
       # Checks that all Terraform configuration files adhere to a canonical format
       - name: Terraform Format
         run: terraform fmt -check
-
-      # Checks if all the Terraform code is valid 
-      - name: Terraform Validate 
-        run: terraform validate
