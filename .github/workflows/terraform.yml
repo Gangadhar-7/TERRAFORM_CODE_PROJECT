@@ -29,6 +29,6 @@ jobs:
       - name: Terraform Format
         run: terraform fmt -check
 
-      # Checks if all the Terraform code is valid
+      # Checks if all the Terraform code is valid 
       - name: Terraform Validate 
         run: terraform validate
