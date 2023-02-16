@@ -2,8 +2,8 @@ variable "region" {
   type = string
 }
 
-variable "aws_profile"{
-    type = string
+variable "aws_profile" {
+  type = string
 }
 
 variable "cidr_block" {
@@ -11,17 +11,17 @@ variable "cidr_block" {
 }
 
 variable "public_subnets" {
-  type = list(string)
+  type = number
 }
 
 variable "private_subnets" {
-  type = list(string)
+  type = number
 }
 
 variable "public_availability_zones" {
-  type = list(string)
+  type = number
 }
 
 variable "private_availability_zones" {
-  type = list(string)
+  type = number
 }
