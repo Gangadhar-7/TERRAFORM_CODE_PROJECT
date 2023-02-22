@@ -17,11 +17,3 @@ variable "public_subnets" {
 variable "private_subnets" {
   type = number
 }
-
-variable "public_availability_zones" {
-  type = number
-}
-
-variable "private_availability_zones" {
-  type = number
-}

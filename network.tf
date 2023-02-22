@@ -71,3 +71,60 @@ resource "aws_route_table_association" "private-route-table-association" {
   subnet_id      = aws_subnet.private-subnet[count.index].id
   route_table_id = aws_route_table.private-route-table.id
 }
+
+resource "aws_security_group" "sg" {
+  name        = "${var.aws_profile}-sg"
+  description = "Default security group to allow inbound/outbound from the VPC"
+  vpc_id      = aws_vpc.dev-vpc.id
+  depends_on  = [aws_vpc.dev-vpc]
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.aws_profile}-sg"
+  }
+}
+
+resource "aws_instance" "webapp-server" {
+  ami                     = "ami-0707fcb04899b2ad4"
+  instance_type           = "t2.micro"
+  disable_api_termination = false
+  ebs_optimized           = false
+  root_block_device {
+    volume_size           = 50
+    volume_type           = "gp2"
+    delete_on_termination = true
+  }
+  vpc_security_group_ids = [aws_security_group.sg.id]
+  subnet_id              = aws_subnet.public-subnet[0].id
+  key_name               = "ec2.pub"
+
+  tags = {
+    Name = "Webapp EC2 Instance"
+  }
+}
