@@ -118,6 +118,11 @@ data "aws_ami" "custom_ami" {
   }
 }
 
+resource "aws_key_pair" "ec2keypair" {
+  key_name  = "ec2"
+  public_key = file("~/.ssh/ec2.pub")
+}
+
 resource "aws_instance" "webapp-server" {
   ami                     = data.aws_ami.custom_ami.id
   instance_type           = "t2.micro"
@@ -130,7 +135,7 @@ resource "aws_instance" "webapp-server" {
   }
   vpc_security_group_ids = [aws_security_group.sg.id]
   subnet_id              = aws_subnet.public-subnet[0].id
-  key_name               = "ec2.pub"
+  key_name               = aws_key_pair.ec2keypair.key_name
 
   tags = {
     Name = "Webapp EC2 Instance"
