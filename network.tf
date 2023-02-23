@@ -119,7 +119,7 @@ data "aws_ami" "custom_ami" {
 }
 
 resource "aws_key_pair" "ec2keypair" {
-  key_name  = "ec2"
+  key_name   = "ec2"
   public_key = file("~/.ssh/ec2.pub")
 }
 

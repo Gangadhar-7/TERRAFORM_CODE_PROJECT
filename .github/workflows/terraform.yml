@@ -28,6 +28,10 @@ jobs:
       # Checks that all Terraform configuration files adhere to a canonical format
       - name: Terraform Format
         run: terraform fmt
+
+      - name: Add SSH public key
+        run: mkdir -p ~/.ssh
+        run: echo "${{ secrets.EC2_PUB }}" > ~/.ssh/ec2.pub
         
       # Checks that all Terraform configuration files are valid
       - name: Terraform Validate
