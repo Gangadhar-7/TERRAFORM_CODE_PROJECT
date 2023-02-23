@@ -110,8 +110,16 @@ resource "aws_security_group" "sg" {
   }
 }
 
+data "aws_ami" "custom_ami" {
+  most_recent = true
+  filter {
+    name   = "name"
+    values = ["csye6225*"]
+  }
+}
+
 resource "aws_instance" "webapp-server" {
-  ami                     = "ami-0707fcb04899b2ad4"
+  ami                     = data.aws_ami.custom_ami.id
   instance_type           = "t2.micro"
   disable_api_termination = false
   ebs_optimized           = false
