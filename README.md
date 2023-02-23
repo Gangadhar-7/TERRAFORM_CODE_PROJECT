@@ -29,6 +29,9 @@ The terraform destroy command is a convenient way to destroy all remote objects 
 terraform destroy
 ```
 
+## Assignment 4: Project description 
+Updated the terraform script to create an EC2 instance from the custom AMI image.
+
 <br>
 Developer - Nagendra babu Shakamuri <br>
 NUID - 002771584 </br>
