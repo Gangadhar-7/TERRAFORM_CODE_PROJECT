@@ -111,11 +111,11 @@ resource "aws_security_group" "app-sg" {
 }
 
 resource "aws_security_group_rule" "database_inbound_rule" {
-  type        = "ingress"
-  from_port   = 3306
-  to_port     = 3306
-  protocol    = "tcp"
-  security_group_id = aws_security_group.db-sg.id
+  type                     = "egress"
+  from_port                = 3306
+  to_port                  = 3306
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.db-sg.id
   source_security_group_id = aws_security_group.app-sg.id
 }
 
@@ -124,10 +124,46 @@ resource "aws_security_group" "db-sg" {
   description = "Database security group to allow inbound/outbound from the VPC"
   vpc_id      = aws_vpc.dev-vpc.id
   depends_on  = [aws_vpc.dev-vpc]
-
+  ingress {
+    from_port   = 3306
+    to_port     = 3306
+    protocol    = "tcp"
+    security_groups = [aws_security_group.app-sg.id]
+  }
   tags = {
     Name = "${var.aws_profile}-database-sg"
   }
+}
+
+# Create a DB subnet group
+resource "aws_db_subnet_group" "private_db_subnet_group" {
+  name       = "private_db_subnet_group"  
+  # subnet_ids = aws_subnet.private-subnet
+  subnet_ids = [ for s in aws_subnet.private-subnet : s.id ]
+}
+
+# Create an RDS parameter group
+resource "aws_db_parameter_group" "rds_parameter_group" {
+  name_prefix = "rds-parameter-group"
+  family      = "mysql8.0"
+  description = "Custom parameter group for RDS instances"
+}
+
+# Create the RDS instance
+resource "aws_db_instance" "rds_instance" {
+  identifier             = "csye6225"
+  engine                 = "mysql"
+  instance_class         = "db.t3.micro"
+  db_name                = "csye6225"
+  username               = "${var.db_username}"
+  password               = "${var.db_password}"
+  allocated_storage      = 10
+  db_subnet_group_name   = aws_db_subnet_group.private_db_subnet_group.name
+  vpc_security_group_ids = [aws_security_group.db-sg.id]
+  publicly_accessible    = false
+  multi_az               = false
+  parameter_group_name   = aws_db_parameter_group.rds_parameter_group.name
+  skip_final_snapshot    = true
 }
 
 data "aws_ami" "custom_ami" {
@@ -145,7 +181,7 @@ resource "random_id" "random" {
 }
 
 resource "aws_s3_bucket" "private_bucket" {
-  bucket = "my-${var.aws_profile}-bucket-${random_id.random.hex}"
+  bucket        = "my-${var.aws_profile}-bucket-${random_id.random.hex}"
   force_destroy = true
 }
 
@@ -173,13 +209,13 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
 resource "aws_s3_bucket_lifecycle_configuration" "this" {
   bucket = aws_s3_bucket.private_bucket.id
   rule {
-      id      = "transition_to_standard_ia"    
-      status  = "Enabled"
-      filter {}
-      transition {
-        days          = 30
-        storage_class = "STANDARD_IA"
-      }
+    id     = "transition_to_standard_ia"
+    status = "Enabled"
+    filter {}
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
   }
 }
 
@@ -234,7 +270,7 @@ resource "aws_iam_role_policy_attachment" "s3_access_role_attachment" {
 }
 
 resource "aws_iam_instance_profile" "ec2_profile" {
-  name  = "ec2_profile"
+  name = "ec2_profile"
   role = aws_iam_role.EC2-CSYE6225.name
 }
 
@@ -259,6 +295,18 @@ resource "aws_instance" "webapp-server" {
   vpc_security_group_ids = [aws_security_group.app-sg.id]
   subnet_id              = aws_subnet.public-subnet[0].id
   key_name               = aws_key_pair.ec2keypair.key_name
+  user_data = <<-EOF
+    #!/bin/bash
+    # Install MySQL client
+    sudo apt-get install -y mysql-client
+
+    sudo cat >> ~/.bashrc <<'EOF'
+      export S3_BUCKET=${aws_s3_bucket.private_bucket.id}
+      export DATABASE=${var.db_name}
+      export HOST=${aws_db_instance.rds_instance.address}
+      export USER_NAME=${aws_db_instance.rds_instance.username}
+      export PASSWORD=${var.db_password}
+  EOF
 
   tags = {
     Name = "Webapp EC2 Instance"
