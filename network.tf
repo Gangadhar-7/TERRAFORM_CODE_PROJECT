@@ -115,8 +115,8 @@ resource "aws_security_group_rule" "database_inbound_rule" {
   from_port                = 3306
   to_port                  = 3306
   protocol                 = "tcp"
-  security_group_id        = aws_security_group.db-sg.id
-  source_security_group_id = aws_security_group.app-sg.id
+  security_group_id        = aws_security_group.app-sg.id
+  source_security_group_id = aws_security_group.db-sg.id
 }
 
 resource "aws_security_group" "db-sg" {
@@ -154,7 +154,7 @@ resource "aws_db_instance" "rds_instance" {
   identifier             = "csye6225"
   engine                 = "mysql"
   instance_class         = "db.t3.micro"
-  db_name                = "csye6225"
+  db_name                = "${var.db_name}"
   username               = "${var.db_username}"
   password               = "${var.db_password}"
   allocated_storage      = 10
@@ -301,11 +301,11 @@ resource "aws_instance" "webapp-server" {
     sudo apt-get install -y mysql-client
 
     sudo cat >> ~/.bashrc <<'EOF'
-      export S3_BUCKET=${aws_s3_bucket.private_bucket.id}
-      export DATABASE=${var.db_name}
-      export HOST=${aws_db_instance.rds_instance.address}
-      export USER_NAME=${aws_db_instance.rds_instance.username}
-      export PASSWORD=${var.db_password}
+    export S3_BUCKET=${aws_s3_bucket.private_bucket.id}
+    export DATABASE=${var.db_name}
+    export HOST=${aws_db_instance.rds_instance.address}
+    export USER_NAME=${aws_db_instance.rds_instance.username}
+    export PASSWORD=${var.db_password}
   EOF
 
   tags = {

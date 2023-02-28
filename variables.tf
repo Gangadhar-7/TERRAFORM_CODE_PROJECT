@@ -22,15 +22,12 @@ variable "private_subnets" {
 
 variable "db_name" {
   type = string
-  default = "webapp"
 }
 
 variable "db_username" {
   type = string
-  default = "root"
 }
 
 variable "db_password" {
   type = string
-  default = "Kissanime123"
 }
