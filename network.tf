@@ -290,6 +290,7 @@ resource "aws_instance" "webapp-server" {
   key_name               = aws_key_pair.ec2keypair.key_name
   user_data = <<-EOF
     #!/bin/bash
+    echo 'export AWS_DEFAULT_REGION=${var.region}' >> ~/.bashrc
     echo 'export S3_BUCKET=${aws_s3_bucket.private_bucket.id}' >> ~/.bashrc
     echo 'export DATABASE=${var.db_name}' >> ~/.bashrc
     echo 'export HOST=${aws_db_instance.rds_instance.address}' >> ~/.bashrc
