@@ -190,13 +190,6 @@ resource "aws_s3_bucket_acl" "this" {
   acl    = "private"
 }
 
-resource "aws_s3_bucket_versioning" "this" {
-  bucket = aws_s3_bucket.private_bucket.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   bucket = aws_s3_bucket.private_bucket.id
   rule {
@@ -297,15 +290,13 @@ resource "aws_instance" "webapp-server" {
   key_name               = aws_key_pair.ec2keypair.key_name
   user_data = <<-EOF
     #!/bin/bash
-    # Install MySQL client
-    sudo apt-get install -y mysql-client
-
-    sudo cat >> ~/.bashrc <<'EOF'
-    export S3_BUCKET=${aws_s3_bucket.private_bucket.id}
-    export DATABASE=${var.db_name}
-    export HOST=${aws_db_instance.rds_instance.address}
-    export USER_NAME=${aws_db_instance.rds_instance.username}
-    export PASSWORD=${var.db_password}
+    echo 'export S3_BUCKET=${aws_s3_bucket.private_bucket.id}' >> ~/.bashrc
+    echo 'export DATABASE=${var.db_name}' >> ~/.bashrc
+    echo 'export HOST=${aws_db_instance.rds_instance.address}' >> ~/.bashrc
+    echo 'export USER_NAME=${aws_db_instance.rds_instance.username}' >> ~/.bashrc
+    echo 'export PASSWORD=${var.db_password}' >> ~/.bashrc
+    sudo systemctl daemon-reload
+    sudo systemctl restart webapp.service
   EOF
 
   tags = {
