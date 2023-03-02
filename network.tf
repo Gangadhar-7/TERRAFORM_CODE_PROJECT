@@ -105,19 +105,26 @@ resource "aws_security_group" "app-sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  egress {  
+    from_port   = 0  
+    to_port     = 0  
+    protocol    = "-1"  
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   tags = {
     Name = "${var.aws_profile}-application-sg"
   }
 }
 
-resource "aws_security_group_rule" "database_inbound_rule" {
-  type                     = "egress"
-  from_port                = 3306
-  to_port                  = 3306
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.app-sg.id
-  source_security_group_id = aws_security_group.db-sg.id
-}
+# resource "aws_security_group_rule" "database_inbound_rule" {
+#   type                     = "egress"
+#   from_port                = 3306
+#   to_port                  = 3306
+#   protocol                 = "tcp"
+#   security_group_id        = aws_security_group.app-sg.id
+#   source_security_group_id = aws_security_group.db-sg.id
+# }
 
 resource "aws_security_group" "db-sg" {
   name        = "${var.aws_profile}-database-sg"
@@ -125,9 +132,9 @@ resource "aws_security_group" "db-sg" {
   vpc_id      = aws_vpc.dev-vpc.id
   depends_on  = [aws_vpc.dev-vpc]
   ingress {
-    from_port   = 3306
-    to_port     = 3306
-    protocol    = "tcp"
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
     security_groups = [aws_security_group.app-sg.id]
   }
   tags = {
@@ -137,9 +144,9 @@ resource "aws_security_group" "db-sg" {
 
 # Create a DB subnet group
 resource "aws_db_subnet_group" "private_db_subnet_group" {
-  name       = "private_db_subnet_group"  
+  name = "private_db_subnet_group"
   # subnet_ids = aws_subnet.private-subnet
-  subnet_ids = [ for s in aws_subnet.private-subnet : s.id ]
+  subnet_ids = [for s in aws_subnet.private-subnet : s.id]
 }
 
 # Create an RDS parameter group
@@ -154,9 +161,9 @@ resource "aws_db_instance" "rds_instance" {
   identifier             = "csye6225"
   engine                 = "mysql"
   instance_class         = "db.t3.micro"
-  db_name                = "${var.db_name}"
-  username               = "${var.db_username}"
-  password               = "${var.db_password}"
+  db_name                = var.db_name
+  username               = var.db_username
+  password               = var.db_password
   allocated_storage      = 10
   db_subnet_group_name   = aws_db_subnet_group.private_db_subnet_group.name
   vpc_security_group_ids = [aws_security_group.db-sg.id]
@@ -288,16 +295,34 @@ resource "aws_instance" "webapp-server" {
   vpc_security_group_ids = [aws_security_group.app-sg.id]
   subnet_id              = aws_subnet.public-subnet[0].id
   key_name               = aws_key_pair.ec2keypair.key_name
-  user_data = <<-EOF
-    #!/bin/bash
-    echo 'export AWS_DEFAULT_REGION=${var.region}' >> ~/.bashrc
-    echo 'export S3_BUCKET=${aws_s3_bucket.private_bucket.id}' >> ~/.bashrc
-    echo 'export DATABASE=${var.db_name}' >> ~/.bashrc
-    echo 'export HOST=${aws_db_instance.rds_instance.address}' >> ~/.bashrc
-    echo 'export USER_NAME=${aws_db_instance.rds_instance.username}' >> ~/.bashrc
-    echo 'export PASSWORD=${var.db_password}' >> ~/.bashrc
+  user_data              = <<-EOF
+    #!/bin/bash    
+        
+    echo "[Unit]
+    Description=app.js - making your environment variables
+    Documentation=https://example.com
+    Wants=network-online.target
+    After=network-online.target
+
+    [Service]
+    Environment="AWS_DEFAULT_REGION=${var.region}"
+    Environment="S3_BUCKET=${aws_s3_bucket.private_bucket.id}"
+    Environment="DATABASE=${var.db_name}"
+    Environment="HOST=${aws_db_instance.rds_instance.address}"
+    Environment="USER_NAME=${aws_db_instance.rds_instance.username}"
+    Environment="PASSWORD=${var.db_password}"
+    Type=simple
+    User=ec2-user
+    WorkingDirectory=/home/ec2-user/webapp-main
+    ExecStart=/home/ec2-user/.nvm/versions/node/v16.19.1/bin/node app.js
+    Restart=on-failure
+
+    [Install]
+    WantedBy=multi-user.target" > /etc/systemd/system/webapp.service
+
     sudo systemctl daemon-reload
-    sudo systemctl restart webapp.service
+    sudo systemctl enable webapp.service
+    sudo systemctl start webapp.service
   EOF
 
   tags = {

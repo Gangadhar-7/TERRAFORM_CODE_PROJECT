@@ -1,11 +1,9 @@
 variable "region" {
-  type = string
-  default = "us-east-1"
+  type    = string
 }
 
 variable "aws_profile" {
-  type = string
-  default = "dev"
+  type    = string
 }
 
 variable "cidr_block" {
