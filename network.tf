@@ -105,10 +105,10 @@ resource "aws_security_group" "app-sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  egress {  
-    from_port   = 0  
-    to_port     = 0  
-    protocol    = "-1"  
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -328,4 +328,16 @@ resource "aws_instance" "webapp-server" {
   tags = {
     Name = "Webapp EC2 Instance"
   }
+}
+
+data "aws_route53_zone" "selected" {
+  name = "${var.aws_profile == "dev" ? "dev" : "prod"}.neowebapp.me"
+}
+
+resource "aws_route53_record" "new_record" {
+  zone_id = data.aws_route53_zone.selected.zone_id
+  name    = data.aws_route53_zone.selected.name
+  type    = "A"
+  ttl     = 300
+  records = [aws_instance.webapp-server.public_ip]
 }

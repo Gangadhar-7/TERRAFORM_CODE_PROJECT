@@ -1,9 +1,9 @@
 variable "region" {
-  type    = string
+  type = string
 }
 
 variable "aws_profile" {
-  type    = string
+  type = string
 }
 
 variable "cidr_block" {
