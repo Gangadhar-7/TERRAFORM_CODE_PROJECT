@@ -32,6 +32,9 @@ terraform destroy
 ## Assignment 4: Project description 
 Updated the terraform script to create an EC2 instance from the custom AMI image.
 
+## Assignment 6: Project description 
+Updated the terraform script to create a DNS A record and point the subdomain to the EC2 Ip address.
+
 <br>
 Developer - Nagendra babu Shakamuri <br>
 NUID - 002771584 </br>
