@@ -117,15 +117,6 @@ resource "aws_security_group" "app-sg" {
   }
 }
 
-# resource "aws_security_group_rule" "database_inbound_rule" {
-#   type                     = "egress"
-#   from_port                = 3306
-#   to_port                  = 3306
-#   protocol                 = "tcp"
-#   security_group_id        = aws_security_group.app-sg.id
-#   source_security_group_id = aws_security_group.db-sg.id
-# }
-
 resource "aws_security_group" "db-sg" {
   name        = "${var.aws_profile}-database-sg"
   description = "Database security group to allow inbound/outbound from the VPC"
@@ -173,6 +164,8 @@ resource "aws_db_instance" "rds_instance" {
   skip_final_snapshot    = true
 }
 
+#Get the latest AMI.
+
 data "aws_ami" "custom_ami" {
   most_recent = true
   filter {
@@ -187,9 +180,19 @@ resource "random_id" "random" {
   byte_length = 4
 }
 
+#Create a private S3 bucket.
+
 resource "aws_s3_bucket" "private_bucket" {
   bucket        = "my-${var.aws_profile}-bucket-${random_id.random.hex}"
   force_destroy = true
+}
+
+resource "aws_s3_bucket_public_access_block" "app" {
+  bucket                  = aws_s3_bucket.private_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 resource "aws_s3_bucket_acl" "this" {
@@ -281,6 +284,8 @@ resource "aws_key_pair" "ec2keypair" {
   public_key = file("~/.ssh/ec2.pub")
 }
 
+# Create webapp server.
+
 resource "aws_instance" "webapp-server" {
   ami                     = data.aws_ami.custom_ami.id
   instance_type           = "t2.micro"
@@ -330,9 +335,13 @@ resource "aws_instance" "webapp-server" {
   }
 }
 
+# Select the DNS zone.
+
 data "aws_route53_zone" "selected" {
-  name = "${var.aws_profile == "dev" ? "dev" : "prod"}.neowebapp.me"
+  name = var.aws_profile == "dev" ? "${var.dev_domain}" : "${var.prod_domain}"
 }
+
+# Create a new A record that points to the webapp server IP.
 
 resource "aws_route53_record" "new_record" {
   zone_id = data.aws_route53_zone.selected.zone_id

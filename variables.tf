@@ -29,3 +29,11 @@ variable "db_username" {
 variable "db_password" {
   type = string
 }
+
+variable "dev_domain" {
+  type = string
+}
+
+variable "prod_domain" {
+  type = string
+}
