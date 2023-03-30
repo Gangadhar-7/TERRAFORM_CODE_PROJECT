@@ -272,6 +272,11 @@ resource "aws_iam_role_policy_attachment" "s3_access_role_attachment" {
   role       = aws_iam_role.EC2-CSYE6225.name
 }
 
+resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy_attachment" {
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+  role       = aws_iam_role.EC2-CSYE6225.name
+}
+
 resource "aws_iam_instance_profile" "ec2_profile" {
   name = "ec2_profile"
   role = aws_iam_role.EC2-CSYE6225.name
@@ -302,7 +307,7 @@ resource "aws_instance" "webapp-server" {
   key_name               = aws_key_pair.ec2keypair.key_name
   user_data              = <<-EOF
     #!/bin/bash    
-        
+    
     echo "[Unit]
     Description=app.js - making your environment variables
     Documentation=https://example.com
@@ -318,8 +323,8 @@ resource "aws_instance" "webapp-server" {
     Environment="PASSWORD=${var.db_password}"
     Type=simple
     User=ec2-user
-    WorkingDirectory=/home/ec2-user/webapp-main
-    ExecStart=/home/ec2-user/.nvm/versions/node/v16.19.1/bin/node app.js
+    WorkingDirectory=/home/ec2-user/webapp-main/webapp
+    ExecStart=/usr/bin/node app.js
     Restart=on-failure
 
     [Install]
@@ -328,6 +333,16 @@ resource "aws_instance" "webapp-server" {
     sudo systemctl daemon-reload
     sudo systemctl enable webapp.service
     sudo systemctl start webapp.service
+
+    sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+    -a fetch-config \
+    -m ec2 \
+    -c file:/opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-config.json \
+    -s
+
+    sudo systemctl start amazon-cloudwatch-agent
+
+    sudo systemctl enable amazon-cloudwatch-agent
   EOF
 
   tags = {
