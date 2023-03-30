@@ -323,7 +323,7 @@ resource "aws_instance" "webapp-server" {
     Environment="PASSWORD=${var.db_password}"
     Type=simple
     User=ec2-user
-    WorkingDirectory=/home/ec2-user/webapp-main/webapp
+    WorkingDirectory=/home/ec2-user/webapp-main/
     ExecStart=/usr/bin/node app.js
     Restart=on-failure
 
