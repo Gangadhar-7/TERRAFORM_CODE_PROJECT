@@ -38,6 +38,9 @@ Updated the terraform script to create a DNS A record and point the subdomain to
 ## Assignment 7: Project description
 Updated the terraform script to add cloudwatchagent server policy to the EC2-CSYE6225 role.
 
+## Assignment 8: Project description
+Updated the terraform script to add load balancer, EC2 target group and Auto scaling group to balance the load between/among the instances.
+
 <br>
 Developer - Nagendra babu Shakamuri <br>
 NUID - 002771584 </br>
