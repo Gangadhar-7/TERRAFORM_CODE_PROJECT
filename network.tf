@@ -72,18 +72,11 @@ resource "aws_route_table_association" "private-route-table-association" {
   route_table_id = aws_route_table.private-route-table.id
 }
 
-resource "aws_security_group" "app-sg" {
-  name        = "${var.aws_profile}-application-sg"
-  description = "Default security group to allow inbound/outbound from the VPC"
+resource "aws_security_group" "app-lb-sg" {
+  name        = "${var.aws_profile}-app-load-balancer-sg"
+  description = "Load balancer security group to allow inbound traffic from the Internet"
   vpc_id      = aws_vpc.dev-vpc.id
   depends_on  = [aws_vpc.dev-vpc]
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   ingress {
     from_port   = 80
     to_port     = 80
@@ -98,11 +91,35 @@ resource "aws_security_group" "app-sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.aws_profile}-app-load-balancer-sg"
+  }
+}
+
+resource "aws_security_group" "app-sg" {
+  name        = "${var.aws_profile}-application-sg"
+  description = "Default security group to allow inbound/outbound from the VPC"
+  vpc_id      = aws_vpc.dev-vpc.id
+  depends_on  = [aws_vpc.dev-vpc]
   ingress {
-    from_port   = 3000
-    to_port     = 3000
+    from_port   = 22
+    to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app-lb-sg.id]
   }
 
   egress {
@@ -277,35 +294,81 @@ resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy_attachment" {
   role       = aws_iam_role.EC2-CSYE6225.name
 }
 
-resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "ec2_profile"
-  role = aws_iam_role.EC2-CSYE6225.name
-}
+# Application load balancer
+resource "aws_lb" "app-lb" {
+  name               = "${var.aws_profile}-app-load-balancer"
+  internal           = false
+  load_balancer_type = "application"
+  subnets            = [for s in aws_subnet.public-subnet : s.id]
+  security_groups    = [aws_security_group.app-lb-sg.id]
 
-# Create access key pair.
-
-resource "aws_key_pair" "ec2keypair" {
-  key_name   = "ec2.pub"
-  public_key = file("~/.ssh/ec2.pub")
-}
-
-# Create webapp server.
-
-resource "aws_instance" "webapp-server" {
-  ami                     = data.aws_ami.custom_ami.id
-  instance_type           = "t2.micro"
-  iam_instance_profile    = aws_iam_instance_profile.ec2_profile.name
-  disable_api_termination = false
-  ebs_optimized           = false
-  root_block_device {
-    volume_size           = 50
-    volume_type           = "gp2"
-    delete_on_termination = true
+  tags = {
+    Name = "${var.aws_profile}-app-load-balancer"
   }
-  vpc_security_group_ids = [aws_security_group.app-sg.id]
-  subnet_id              = aws_subnet.public-subnet[0].id
-  key_name               = aws_key_pair.ec2keypair.key_name
-  user_data              = <<-EOF
+}
+
+
+# Target group
+resource "aws_lb_target_group" "webapp_tg" {
+  name        = "webapp-tg"
+  port        = 3000
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.dev-vpc.id
+  target_type = "instance"
+  health_check {
+    enabled             = true
+    interval            = 60
+    path                = "/healthz"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 2
+    healthy_threshold   = 2
+    unhealthy_threshold = 5
+  }
+}
+
+resource "aws_lb_listener" "webapp_listener" {
+  load_balancer_arn = aws_lb.app-lb.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.webapp_tg.arn
+  }
+}
+
+# Launch Configuration
+resource "aws_launch_template" "asg_launch_template" {
+  name_prefix             = "asg-launch-config"
+  image_id                = data.aws_ami.custom_ami.id
+  instance_type           = "t2.micro"
+  key_name                = aws_key_pair.ec2keypair.key_name
+  ebs_optimized           = false
+  disable_api_termination = false
+
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [aws_security_group.app-sg.id]
+  }
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size           = 50
+      volume_type           = "gp2"
+      delete_on_termination = true
+    }
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "Webapp EC2 Instance"
+    }
+  }
+
+  user_data = base64encode(<<-EOF
     #!/bin/bash    
     
     echo "[Unit]
@@ -344,10 +407,97 @@ resource "aws_instance" "webapp-server" {
 
     sudo systemctl enable amazon-cloudwatch-agent
   EOF
+  )
 
-  tags = {
-    Name = "Webapp EC2 Instance"
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2_profile.name
   }
+}
+
+# Auto Scaling Group
+resource "aws_autoscaling_group" "webapp_asg" {
+  name                = "webapp-asg"
+  target_group_arns   = [aws_lb_target_group.webapp_tg.arn]
+  vpc_zone_identifier = [for s in aws_subnet.public-subnet : s.id]
+  launch_template {
+    id      = aws_launch_template.asg_launch_template.id
+    version = "$Latest"
+  }
+  min_size                  = 1
+  max_size                  = 3
+  desired_capacity          = 1
+  health_check_type         = "ELB"
+  health_check_grace_period = 120
+  default_cooldown          = 60
+  tag {
+    key                 = "Name"
+    value               = "WebApp EC2 Instance"
+    propagate_at_launch = true
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "scale_up_alarm" {
+  alarm_name          = "high-cpu-usage"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 5
+  alarm_description   = "This metric checks if CPU usage is higher than 5% in the past 2 min"
+  alarm_actions       = [aws_autoscaling_policy.scale_up_policy.arn]
+  actions_enabled     = true
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.webapp_asg.name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "scale_down_alarm" {
+  alarm_name          = "low-cpu-usage"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 3
+  alarm_description   = "This metric checks if CPU usage is lower than 3% for the past 2 min"
+  alarm_actions       = [aws_autoscaling_policy.scale_down_policy.arn]
+  actions_enabled     = true
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.webapp_asg.name
+  }
+}
+
+# Scale up policy
+resource "aws_autoscaling_policy" "scale_up_policy" {
+  name                   = "webapp_scale-up-policy"
+  policy_type            = "SimpleScaling"
+  autoscaling_group_name = aws_autoscaling_group.webapp_asg.name
+  scaling_adjustment     = 1
+  adjustment_type        = "ChangeInCapacity"
+}
+
+# Scale down policy
+resource "aws_autoscaling_policy" "scale_down_policy" {
+  name                   = "webapp_scale-down-policy"
+  policy_type            = "SimpleScaling"
+  autoscaling_group_name = aws_autoscaling_group.webapp_asg.name
+  scaling_adjustment     = -1
+  adjustment_type        = "ChangeInCapacity"
+}
+
+resource "aws_iam_instance_profile" "ec2_profile" {
+  name = "ec2_profile"
+  role = aws_iam_role.EC2-CSYE6225.name
+}
+
+# Create access key pair.
+
+resource "aws_key_pair" "ec2keypair" {
+  key_name   = "ec2.pub"
+  public_key = file("~/.ssh/ec2.pub")
 }
 
 # Select the DNS zone.
@@ -356,12 +506,19 @@ data "aws_route53_zone" "selected" {
   name = var.aws_profile == "dev" ? "${var.dev_domain}" : "${var.prod_domain}"
 }
 
-# Create a new A record that points to the webapp server IP.
+# Create a new A record that points to the Load balancer.
 
 resource "aws_route53_record" "new_record" {
   zone_id = data.aws_route53_zone.selected.zone_id
   name    = data.aws_route53_zone.selected.name
   type    = "A"
-  ttl     = 300
-  records = [aws_instance.webapp-server.public_ip]
+  alias {
+    name                   = aws_lb.app-lb.dns_name
+    zone_id                = aws_lb.app-lb.zone_id
+    evaluate_target_health = true
+  }
+}
+
+resource "aws_cloudwatch_log_group" "webapp_log_group" {
+  name = "csye6225"
 }
