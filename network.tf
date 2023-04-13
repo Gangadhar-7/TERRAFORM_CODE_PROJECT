@@ -352,7 +352,7 @@ resource "aws_lb_listener" "webapp_listener" {
 
 data "aws_caller_identity" "current" {}
 
-resource "aws_kms_key" "ebsKey" {
+resource "aws_kms_key" "ebs_kms_key" {
   description             = "Symmetric customer-managed KMS key for EBS"
   deletion_window_in_days = 10
   policy = jsonencode({
@@ -407,7 +407,7 @@ resource "aws_kms_key" "ebsKey" {
 
 # Launch Configuration
 resource "aws_launch_template" "asg_launch_template" {
-  name_prefix   = "asg-launch-config"
+  name          = "asg-launch-config"
   image_id      = data.aws_ami.custom_ami.id
   instance_type = "t2.micro"
   # key_name                = aws_key_pair.ec2keypair.key_name
