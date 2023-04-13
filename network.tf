@@ -77,12 +77,12 @@ resource "aws_security_group" "app-lb-sg" {
   description = "Load balancer security group to allow inbound traffic from the Internet"
   vpc_id      = aws_vpc.dev-vpc.id
   depends_on  = [aws_vpc.dev-vpc]
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # ingress {
+  #   from_port   = 80
+  #   to_port     = 80
+  #   protocol    = "tcp"
+  #   cidr_blocks = ["0.0.0.0/0"]
+  # }
 
   ingress {
     from_port   = 443
@@ -108,12 +108,12 @@ resource "aws_security_group" "app-sg" {
   description = "Default security group to allow inbound/outbound from the VPC"
   vpc_id      = aws_vpc.dev-vpc.id
   depends_on  = [aws_vpc.dev-vpc]
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # ingress {
+  #   from_port   = 22
+  #   to_port     = 22
+  #   protocol    = "tcp"
+  #   cidr_blocks = ["0.0.0.0/0"]
+  # }
 
   ingress {
     from_port       = 3000
@@ -164,6 +164,10 @@ resource "aws_db_parameter_group" "rds_parameter_group" {
   description = "Custom parameter group for RDS instances"
 }
 
+resource "aws_kms_key" "rds_kms_key" {
+  description = "My RDS KMS key"
+}
+
 # Create the RDS instance
 resource "aws_db_instance" "rds_instance" {
   identifier             = "csye6225"
@@ -173,6 +177,8 @@ resource "aws_db_instance" "rds_instance" {
   username               = var.db_username
   password               = var.db_password
   allocated_storage      = 10
+  storage_encrypted      = true
+  kms_key_id             = aws_kms_key.rds_kms_key.arn
   db_subnet_group_name   = aws_db_subnet_group.private_db_subnet_group.name
   vpc_security_group_ids = [aws_security_group.db-sg.id]
   publicly_accessible    = false
@@ -327,10 +333,16 @@ resource "aws_lb_target_group" "webapp_tg" {
   }
 }
 
+data "aws_acm_certificate" "ssl_certificate" {
+  domain   = var.aws_profile == "dev" ? "${var.dev_domain}" : "${var.prod_domain}"
+  statuses = ["ISSUED"]
+}
+
 resource "aws_lb_listener" "webapp_listener" {
   load_balancer_arn = aws_lb.app-lb.arn
-  port              = "80"
-  protocol          = "HTTP"
+  port              = "443"
+  protocol          = "HTTPS"
+  certificate_arn   = data.aws_acm_certificate.ssl_certificate.arn
 
   default_action {
     type             = "forward"
@@ -338,12 +350,67 @@ resource "aws_lb_listener" "webapp_listener" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
+resource "aws_kms_key" "ebs_kms_key" {
+  description             = "Symmetric customer-managed KMS key for EBS"
+  deletion_window_in_days = 10
+  policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [{
+      "Sid" : "Enable IAM User Permissions",
+      "Effect" : "Allow",
+      "Principal" : {
+        "AWS" : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+      },
+      "Action" : "kms:*",
+      "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow service-linked role use of the customer managed key",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : [
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+          ]
+        },
+        "Action" : [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ],
+        "Resource" : "*"
+      },
+      {
+        "Sid" : "Allow attachment of persistent resources",
+        "Effect" : "Allow",
+        "Principal" : {
+          "AWS" : [
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+          ]
+        },
+        "Action" : [
+          "kms:CreateGrant"
+        ],
+        "Resource" : "*",
+        "Condition" : {
+          "Bool" : {
+            "kms:GrantIsForAWSResource" : true
+          }
+        }
+      }
+    ]
+  })
+}
+
 # Launch Configuration
 resource "aws_launch_template" "asg_launch_template" {
-  name_prefix             = "asg-launch-config"
-  image_id                = data.aws_ami.custom_ami.id
-  instance_type           = "t2.micro"
-  key_name                = aws_key_pair.ec2keypair.key_name
+  name          = "asg-launch-config"
+  image_id      = data.aws_ami.custom_ami.id
+  instance_type = "t2.micro"
+  # key_name                = aws_key_pair.ec2keypair.key_name
   ebs_optimized           = false
   disable_api_termination = false
 
@@ -355,9 +422,11 @@ resource "aws_launch_template" "asg_launch_template" {
   block_device_mappings {
     device_name = "/dev/xvda"
     ebs {
-      volume_size           = 50
+      volume_size           = 10
       volume_type           = "gp2"
       delete_on_termination = true
+      encrypted             = true
+      kms_key_id            = aws_kms_key.ebs_kms_key.arn
     }
   }
 
@@ -495,10 +564,10 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 
 # Create access key pair.
 
-resource "aws_key_pair" "ec2keypair" {
-  key_name   = "ec2.pub"
-  public_key = file("~/.ssh/ec2.pub")
-}
+# resource "aws_key_pair" "ec2keypair" {
+#   key_name   = "ec2.pub"
+#   public_key = file("~/.ssh/ec2.pub")
+# }
 
 # Select the DNS zone.
 

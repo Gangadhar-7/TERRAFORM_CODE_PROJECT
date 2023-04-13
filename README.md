@@ -41,6 +41,17 @@ Updated the terraform script to add cloudwatchagent server policy to the EC2-CSY
 ## Assignment 8: Project description
 Updated the terraform script to add load balancer, EC2 target group and Auto scaling group to balance the load between/among the instances.
 
+## Assignment 9: Project description
+Attached the imported SSL certificate to the listener interface of the load balancer and allowed only HTTPS traffic.
+Updated the terraform script and removed HTTP port from the listener interface of the ALB to prevent HTTP traffic flowing into the Loadbalancer.
+Updated the launch template to encrypt the EBS volume of the EC2 instance with a KMS key.
+Also used another KMS key to encrypt RDS.
+
+Following is the command used to import the NameCheap SSL certificate into the AWS certificate manager.
+```
+aws acm import-certificate --certificate file://Certificate.pem --certificate-chain file://CertificateChain.pem --private-key file://PrivateKey.pem
+```
+
 <br>
 Developer - Nagendra babu Shakamuri <br>
 NUID - 002771584 </br>
