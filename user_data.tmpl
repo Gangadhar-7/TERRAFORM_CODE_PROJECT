@@ -1,0 +1,33 @@
+#!/bin/bash
+source env_variables.sh
+sudo dpkg-reconfigure --priority=low unattended-upgrade --force
+sudo apt update -y
+sudo apt upgrade -y
+sudo export DEBIAN_FRONTEND=noninteractive
+sudo apt install -y apache2 php libapache2-mod-php php-mysql mysql-client-core-8.0
+cd /var/www/html
+sudo mv index.html index.html_bckup  # Backup default index.html if it exists
+sudo git clone https://github.com/Gangadhar-7/dynamic-website-php-sql.git
+cd dynamic-website-php-sql/
+sudo rm -rf .git
+cd ..
+sudo mv -f dynamic-website-php-sql/* . 
+sudo rm -rf dynamic-website-php-sql/
+sudo systemctl restart apache2 -y
+echo -e "[client]\nuser=admin\npassword=admin123" > ~/.my.cnf
+chmod 600 ~/.my.cnf
+export MYSQL_PWD='admin123'
+mysql -h ${HOST} -u ${USERNAME} --ssl-mode=DISABLED <database.sql
+sudo systemctl restart apache2 -y
+#code-deploy-stage
+sudo apt-get update 
+sudo apt-get install ruby-full ruby-webrick wget -y 
+cd /tmp 
+wget https://aws-codedeploy-us-east-1.s3.us-east-1.amazonaws.com/releases/codedeploy-agent_1.3.2-1902_all.deb 
+mkdir codedeploy-agent_1.3.2-1902_ubuntu22 
+dpkg-deb -R codedeploy-agent_1.3.2-1902_all.deb codedeploy-agent_1.3.2-1902_ubuntu22 
+sed 's/Depends:.*/Depends:ruby3.0/' -i ./codedeploy-agent_1.3.2-1902_ubuntu22/DEBIAN/control 
+dpkg-deb -b codedeploy-agent_1.3.2-1902_ubuntu22/ 
+sudo dpkg -i codedeploy-agent_1.3.2-1902_ubuntu22.deb 
+systemctl list-units --type=service | grep codedeploy 
+sudo service codedeploy-agent status > /var/log/your_service_status.log
